@@ -32,6 +32,7 @@ export async function translateChunk(segments, to, context, { first = false } = 
   }
 
   const missing = segments.filter((s) => !map.has(s.index));
+  const untranslated = new Set();
   if (missing.length) {
     try {
       const r = await retry(() => google.translate(missing.map((s) => s.original), to));
@@ -41,9 +42,16 @@ export async function translateChunk(segments, to, context, { first = false } = 
       // Both translators down for this chunk: show the original lines rather than
       // failing the whole video. The run is marked so it is not cached.
       console.warn('[translate] fallback failed too, keeping the original lines:', e.message);
-      missing.forEach((s) => map.set(s.index, s.original));
+      missing.forEach((s) => untranslated.add(s.index));
     }
   }
 
-  return { sourceLang, fellBack: !!primary && missing.length > 0, segments: segments.map((s) => ({ ...s, translated: map.get(s.index) })) };
+  return {
+    sourceLang,
+    fellBack: (!!primary && missing.length > 0) || untranslated.size > 0,
+    // `untranslated` lines carry the original text; clients show it once and never store the chunk.
+    segments: segments.map((s) => (untranslated.has(s.index)
+      ? { ...s, translated: s.original, untranslated: true }
+      : { ...s, translated: map.get(s.index) })),
+  };
 }

@@ -14,9 +14,16 @@ const release = () => { const next = queue.shift(); if (next) next(); else activ
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Circuit breaker: once Google says "too many requests", stop asking for a while.
+// Retrying through a block only extends it (it can last hours).
+const PAUSE_MS = 15 * 60_000;
+let pausedUntil = 0;
+export const googlePaused = () => pausedUntil > Date.now();
+
 async function gtx(text, to) {
   const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&dt=t&tl=' + encodeURIComponent(to);
   for (let attempt = 0; ; attempt++) {
+    if (googlePaused()) throw new Error('google translate paused after rate limiting');
     await slot();
     let res;
     try {
@@ -34,7 +41,12 @@ async function gtx(text, to) {
       const data = await res.json();
       return { text: data[0].map((p) => p[0]).join(''), from: data[2] || '' };
     }
-    const retryable = res.status === 0 || res.status === 429 || res.status >= 500;
+    if (res.status === 429 || res.url?.includes('/sorry/')) {
+      if (!googlePaused()) console.warn(`[google] rate limited; pausing Google for ${PAUSE_MS / 60000} min`);
+      pausedUntil = Date.now() + PAUSE_MS;
+      throw new Error('google translate 429');
+    }
+    const retryable = res.status === 0 || res.status >= 500;
     if (!retryable || attempt >= 4) throw new Error('google translate ' + (res.status || res.error?.message));
     await sleep(1500 * 2 ** attempt + Math.random() * 500); // 1.5 s, 3 s, 6 s, 12 s
   }

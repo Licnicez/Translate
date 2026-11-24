@@ -72,7 +72,7 @@ export default function Player({ videoId, line, waiting, showSubs, showOriginal,
       {line ? (
         <>
           <span className="subs__tr">{line.translated}</span>
-          {showOriginal && <span className="subs__src">{line.original}</span>}
+          {showOriginal && !line.untranslated && <span className="subs__src">{line.original}</span>}
         </>
       ) : waiting ? <span className="subs__wait">translating this part</span> : null}
     </div>

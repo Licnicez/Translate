@@ -26,7 +26,9 @@ export default function Transcript({ segments, active, follow, showOriginal, pen
               <time>{clock(s.start)}</time>
               <span>
                 <span className="line__tr">{s.translated}</span>
-                {showOriginal && <span className="line__src">{s.original}</span>}
+                {s.untranslated
+                  ? <span className="line__src">not translated, the translator was busy</span>
+                  : showOriginal && <span className="line__src">{s.original}</span>}
               </span>
             </button>
           </li>

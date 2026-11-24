@@ -35,9 +35,18 @@ async function tx(store, mode, fn) {
 
 const subKey = (id, lang) => `${id}:${lang}`;
 
+// v2: earlier saves could hold lines that were never translated (both translators
+// down), so they are left behind and fetched again.
+const SUBS_VERSION = 'v2:';
+
 /** { meta, chunks: Segment[][] } or undefined */
-export const getSubs = (id, lang) => tx('subs', 'readonly', (s) => s.get(subKey(id, lang)));
-export const putSubs = (id, lang, value) => tx('subs', 'readwrite', (s) => s.put(value, subKey(id, lang)));
+export const getSubs = (id, lang) => tx('subs', 'readonly', (s) => s.get(SUBS_VERSION + subKey(id, lang)));
+
+/** Saves only fully translated chunks; a chunk with untranslated lines is fetched again next time. */
+export const putSubs = (id, lang, value) => tx('subs', 'readwrite', (s) => s.put({
+  ...value,
+  chunks: (value.chunks || []).map((c) => (c && !c.some((seg) => seg.untranslated) ? c : null)),
+}, SUBS_VERSION + subKey(id, lang)));
 
 export const addHistory = (entry) => tx('history', 'readwrite', (s) => s.put({ ...entry, key: subKey(entry.videoId, entry.lang), at: Date.now() }));
 export async function listHistory(limit = 12) {
