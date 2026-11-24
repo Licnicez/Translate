@@ -14,7 +14,7 @@ const app = new Hono();
 const lang = (v) => (String(v || 'en').replace(/[^\w-]/g, '').slice(0, 8) || 'en');
 
 // The site may live on another origin (Vercel) and reach this API through a tunnel.
-app.use('/api/*', cors({ origin: config.allowedOrigins.includes('*') ? '*' : config.allowedOrigins, allowHeaders: ['x-access-code', 'last-event-id'] }));
+app.use('/api/*', cors({ origin: config.allowedOrigins.includes('*') ? '*' : config.allowedOrigins, allowHeaders: ['x-access-code', 'last-event-id', 'ngrok-skip-browser-warning'] }));
 
 /** With ACCESS_CODE set, every translate request must carry it (?key= for EventSource, or a header). */
 const codeOk = (c) => {

@@ -10,3 +10,17 @@ services:
       - path: .env
         required: false
     restart: unless-stopped
+
+  # Public HTTPS address for the API, for the Vercel site:
+  #   docker compose --profile tunnel up -d
+  # Needs NGROK_AUTHTOKEN and NGROK_URL in .env. Inspector: http://localhost:4040
+  ngrok:
+    image: ngrok/ngrok:latest
+    profiles: ["tunnel"]
+    depends_on: [clipvoice]
+    command: ["http", "clipvoice:8787", "--url", "${NGROK_URL:-}"]
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
+    ports:
+      - "4040:4040"
+    restart: unless-stopped

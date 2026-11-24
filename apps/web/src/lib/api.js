@@ -6,7 +6,10 @@
 const read = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
 const write = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch { /* storage blocked */ } };
 
-export const BUILT_IN = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+/** Skips ngrok's free-plan warning page, which would otherwise answer API calls with HTML. */
+export const API_HEADERS = { 'ngrok-skip-browser-warning': '1' };
+
+export const BUILT_IN =(import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
 export function getServer() {
   return { url: (read('cv-server') || BUILT_IN).replace(/\/+$/, ''), code: read('cv-code') };
@@ -36,7 +39,7 @@ export function apiUrl(path, params = {}, server = getServer()) {
 export async function checkServer(server = getServer()) {
   let res;
   try {
-    res = await fetch(apiUrl('/api/health', {}, server), { signal: AbortSignal.timeout(6000) });
+    res = await fetch(apiUrl('/api/health', {}, server), { headers: API_HEADERS, signal: AbortSignal.timeout(6000) });
   } catch {
     throw new Error(server.url
       ? `Can’t reach the server at ${server.url}. Is the PC on, with Docker and the tunnel running?`
