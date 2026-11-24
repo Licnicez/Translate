@@ -27,7 +27,7 @@ export function normalize(url) {
 
 /** Same-origin hosting needs no address; a static deploy without one cannot translate. */
 export const needsServer = () => !getServer().url && !sameOriginApi();
-const sameOriginApi = () => !/\.vercel\.app$/.test(location.hostname) && !BUILT_IN && import.meta.env.VITE_STATIC !== '1';
+export const sameOriginApi = () => !/\.vercel\.app$/.test(location.hostname) && !BUILT_IN && import.meta.env.VITE_STATIC !== '1';
 
 export function apiUrl(path, params = {}, server = getServer()) {
   const qs = new URLSearchParams(params);

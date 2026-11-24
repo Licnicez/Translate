@@ -8,7 +8,7 @@ import { videoId, linkFromShare } from './lib/youtube.js';
 import { activeIndex, clock } from './lib/sync.js';
 import { openStream } from './lib/stream.js';
 import { getSubs, putSubs, addHistory, listHistory } from './lib/idb.js';
-import { needsServer, checkServer, getServer } from './lib/api.js';
+import { needsServer, checkServer, getServer, sameOriginApi } from './lib/api.js';
 import ServerSettings from './components/ServerSettings.jsx';
 
 /** Chunks arrive in order, but a gap would break the sync search: only use the contiguous run. */
@@ -163,7 +163,7 @@ export default function App() {
             <a className="navlink" href="#about">what you get</a>
             <button type="button" className="navlink cursor-pointer bg-transparent border-0 p-0" aria-expanded={settings.open}
               onClick={() => (settings.open ? closeSettings() : askServer(''))}>
-              {getServer().url ? 'server' : 'set up server'}
+              {sameOriginApi() ? 'access code' : getServer().url ? 'server' : 'set up server'}
             </button>
           </nav>
         </div>
