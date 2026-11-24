@@ -1,0 +1,14 @@
+{
+  "name": "clipvoice",
+  "private": true,
+  "type": "module",
+  "workspaces": ["apps/server", "apps/web"],
+  "scripts": {
+    "dev": "concurrently -n server,web -c magenta,cyan \"npm run dev -w apps/server\" \"npm run dev -w apps/web\"",
+    "build": "npm run build -w apps/web",
+    "start": "npm run start -w apps/server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

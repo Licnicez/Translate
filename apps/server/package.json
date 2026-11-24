@@ -1,0 +1,14 @@
+{
+  "name": "@clipvoice/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=../../.env src/index.js",
+    "start": "node --env-file-if-exists=../../.env src/index.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "hono": "^4.6.0",
+    "youtube-transcript": "^1.3.1"
+  }
+}

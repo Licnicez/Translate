@@ -1,0 +1,42 @@
+import { config } from '../config.js';
+import { gemini } from './gemini.js';
+import { google } from './google.js';
+
+const primary = config.geminiKey ? gemini() : null;
+
+export const translatorName = primary ? primary.name : google.name;
+
+const retry = async (fn, tries = 2) => {
+  for (let i = 0; ; i++) {
+    try { return await fn(); } catch (e) {
+      if (i + 1 >= tries) throw e;
+      await new Promise((r) => setTimeout(r, 600 * (i + 1)));
+    }
+  }
+};
+
+/**
+ * Translate one chunk of segments. Timestamps never leave the server; the answer
+ * is joined back by index, and any line the model skipped is filled by the fallback.
+ * Returns { segments, sourceLang }.
+ */
+export async function translateChunk(segments, to, context, { first = false } = {}) {
+  let map = new Map();
+  let sourceLang = '';
+
+  // No retry here: a slow or busy Gemini hands the chunk to the fallback instead of
+  // holding playback. The first chunk gets a short deadline so the video starts quickly.
+  if (primary) {
+    try { map = await primary.translate(segments, to, context, { timeoutMs: first ? 8_000 : 30_000 }); }
+    catch (e) { console.warn('[translate] gemini failed, using fallback:', e.name === 'TimeoutError' ? 'timed out' : e.message.slice(0, 120)); }
+  }
+
+  const missing = segments.filter((s) => !map.has(s.index));
+  if (missing.length) {
+    const r = await retry(() => google.translate(missing.map((s) => s.original), to));
+    sourceLang = r.sourceLang;
+    missing.forEach((s, i) => map.set(s.index, r.lines[i] || s.original));
+  }
+
+  return { sourceLang, fellBack: !!primary && missing.length > 0, segments: segments.map((s) => ({ ...s, translated: map.get(s.index) })) };
+}

@@ -1,0 +1,12 @@
+# docker compose up --build   →   http://localhost:8787
+services:
+  clipvoice:
+    build: .
+    image: clipvoice:latest
+    ports:
+      - "8787:8787"
+    # GEMINI_API_KEY and GEMINI_MODEL come from .env. Without it, Google Translate is used.
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
