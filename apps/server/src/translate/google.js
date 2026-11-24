@@ -1,26 +1,58 @@
-/** Fallback: Google Translate's free endpoint. Literal, weak on slang, no key needed. */
+/**
+ * Fallback: Google Translate's free endpoint. Literal, weak on slang, no key needed.
+ * It rate-limits (429) when hit hard, so requests share a small pool, back off on
+ * 429/5xx, and a block whose line count comes back wrong is split in halves
+ * rather than resent line by line (a 2-hour video stays at tens of requests).
+ */
+const MAX_PARALLEL = 2;
+let active = 0;
+const queue = [];
+const slot = () => new Promise((resolve) => {
+  if (active < MAX_PARALLEL) { active++; resolve(); } else queue.push(resolve);
+});
+const release = () => { const next = queue.shift(); if (next) next(); else active--; };
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function gtx(text, to) {
   const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&dt=t&tl=' + encodeURIComponent(to);
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: 'q=' + encodeURIComponent(text),
-  });
-  if (!res.ok) throw new Error('google translate ' + res.status);
-  const data = await res.json();
-  return { text: data[0].map((p) => p[0]).join(''), from: data[2] || '' };
+  for (let attempt = 0; ; attempt++) {
+    await slot();
+    let res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: 'q=' + encodeURIComponent(text),
+        signal: AbortSignal.timeout(20_000),
+      });
+    } catch (e) {
+      res = { ok: false, status: 0, error: e };
+    } finally { release(); }
+
+    if (res.ok) {
+      const data = await res.json();
+      return { text: data[0].map((p) => p[0]).join(''), from: data[2] || '' };
+    }
+    const retryable = res.status === 0 || res.status === 429 || res.status >= 500;
+    if (!retryable || attempt >= 4) throw new Error('google translate ' + (res.status || res.error?.message));
+    await sleep(1500 * 2 ** attempt + Math.random() * 500); // 1.5 s, 3 s, 6 s, 12 s
+  }
+}
+
+async function translateBlock(lines, to) {
+  const r = await gtx(lines.join('\n'), to);
+  const parts = r.text.split('\n');
+  if (parts.length === lines.length) return { lines: parts.map((p) => p.trim()), sourceLang: r.from };
+  if (lines.length === 1) return { lines: [r.text.replace(/\n+/g, ' ').trim()], sourceLang: r.from };
+  const mid = lines.length >> 1;
+  const a = await translateBlock(lines.slice(0, mid), to);
+  const b = await translateBlock(lines.slice(mid), to);
+  return { lines: [...a.lines, ...b.lines], sourceLang: r.from || a.sourceLang };
 }
 
 export const google = {
   name: 'google-free',
   /** lines: string[] → { lines: string[], sourceLang } */
-  async translate(lines, to) {
-    const r = await gtx(lines.join('\n'), to);
-    let parts = r.text.split('\n');
-    if (parts.length !== lines.length) {
-      parts = [];
-      for (const l of lines) parts.push((await gtx(l, to)).text);
-    }
-    return { lines: parts, sourceLang: r.from };
-  },
+  translate: (lines, to) => translateBlock(lines, to),
 };

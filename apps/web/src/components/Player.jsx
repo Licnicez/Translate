@@ -22,6 +22,8 @@ export default function Player({ videoId, line, waiting, showSubs, showOriginal,
         playerVars: { playsinline: 1, rel: 0, cc_load_policy: 0, fs: 0, iv_load_policy: 3 },
         events: {
           onApiChange: () => { hideYtCaptions(player); },
+          // The captions module loads when playback starts if the viewer has CC on in YouTube.
+          onStateChange: (e) => { if (e.data === 1 || e.data === 3) hideYtCaptions(player); },
           onReady: () => {
             // YouTube's own captions would sit under ours; switch them off.
             hideYtCaptions(player);

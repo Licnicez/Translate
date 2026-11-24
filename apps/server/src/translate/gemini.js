@@ -60,8 +60,12 @@ export function gemini() {
         res = await call(model, true);
         if (res.status === 400) res = await call(model, false); // model without thinking levels
         if (res.ok || ![404, 429, 500, 503].includes(res.status)) break;
-        busyUntil.set(model, Date.now() + 60_000);
-        console.warn(`[gemini] ${model} answered ${res.status}, skipping it for a minute`);
+        // A spent daily quota says how long until it resets; don't ask again before then.
+        const body = await res.clone().text().catch(() => '');
+        const perDay = res.status === 429 && /PerDay|per day/i.test(body);
+        const wait = perDay ? (Number(body.match(/"retryDelay":\s*"(\d+)s"/)?.[1]) || 3600) * 1000 : 60_000;
+        busyUntil.set(model, Date.now() + wait);
+        console.warn(`[gemini] ${model} answered ${res.status}${perDay ? ' (daily quota used up)' : ''}, skipping it for ${Math.round(wait / 60000)} min`);
       }
       if (!res.ok) throw new Error('gemini ' + res.status + ': ' + (await res.text()).slice(0, 200));
       const data = await res.json();
