@@ -8,6 +8,8 @@ import { videoId, linkFromShare } from './lib/youtube.js';
 import { activeIndex, clock } from './lib/sync.js';
 import { openStream } from './lib/stream.js';
 import { getSubs, putSubs, addHistory, listHistory } from './lib/idb.js';
+import { needsServer, checkServer, getServer } from './lib/api.js';
+import ServerSettings from './components/ServerSettings.jsx';
 
 /** Chunks arrive in order, but a gap would break the sync search: only use the contiguous run. */
 const contiguous = (chunks) => {
@@ -41,11 +43,20 @@ export default function App() {
 
   useEffect(() => { listHistory().then(setHistory); }, []);
 
+  const [settings, setSettings] = useState({ open: false, reason: '' });
+  const pending = useRef(null); // a video waiting for the server to be set up
+  const askServer = useCallback((reason) => setSettings({ open: true, reason }), []);
+
   const start = useCallback((input, to) => {
     const id = videoId(input);
     if (!id) { setError('That does not look like a YouTube link. Paste the address of a video.'); return; }
     try { localStorage.setItem('cv-lang', to); } catch { /* storage blocked */ }
     setError('');
+    if (needsServer()) {
+      pending.current = { input, to };
+      askServer('Add your server’s address first, then the video starts.');
+      return;
+    }
     setCurrent({ id, lang: to, n: Date.now() });
     const qs = new URLSearchParams({ v: id, to });
     window.history.replaceState(null, '', '/?' + qs);
@@ -82,6 +93,14 @@ export default function App() {
         setMeta(metaNow); setChunks(chunksNow);
         if (chunksNow.length >= metaNow.totalChunks) { setDone(true); return; }
       }
+      // Fail fast with a clear reason when the server (often a home PC) is off or locked.
+      try { await checkServer(); } catch (e) {
+        if (cancelled) return;
+        setError(e.message);
+        if (e.code === 'unauthorized') { pending.current = { input: id, to }; askServer(e.message); }
+        return;
+      }
+      if (cancelled) return;
       close = openStream({
         video: id, lang: to, have: chunksNow.length,
         onStatus: setConn,
@@ -94,12 +113,22 @@ export default function App() {
           setChunks(chunksNow); save();
         },
         onDone: () => { setDone(true); setConn(''); },
-        onError: (e) => { setError(e.message); setConn(''); },
+        onError: (e) => {
+          setError(e.message); setConn('');
+          if (e.code === 'unauthorized') { pending.current = { input: id, to }; askServer(e.message); }
+        },
       });
     })();
 
     return () => { cancelled = true; close(); };
-  }, [current]);
+  }, [current, askServer]);
+
+  const closeSettings = () => {
+    setSettings({ open: false, reason: '' });
+    const p = pending.current;
+    pending.current = null;
+    if (p && !needsServer()) start(p.input, p.to);
+  };
 
   useEffect(() => {
     if (meta && deskRef.current && chunks.length <= 1) {
@@ -130,11 +159,18 @@ export default function App() {
       <header className="bar">
         <div className="container flex items-center justify-between min-h-16">
           <a className="mark" href="/" aria-label="clipvoice home">clipvoice</a>
-          <a className="navlink" href="#about">what you get</a>
+          <nav className="flex items-center gap-6" aria-label="site">
+            <a className="navlink" href="#about">what you get</a>
+            <button type="button" className="navlink cursor-pointer bg-transparent border-0 p-0" aria-expanded={settings.open}
+              onClick={() => (settings.open ? closeSettings() : askServer(''))}>
+              {getServer().url ? 'server' : 'set up server'}
+            </button>
+          </nav>
         </div>
       </header>
 
       <main id="main">
+        {settings.open && <div className="pt-6"><ServerSettings open reason={settings.reason} onClose={closeSettings} /></div>}
         <section className="pt-10 pb-8 md:pt-16">
           <div className="container grid gap-6 justify-items-start">
             <h1 className="max-w-[14ch]">paste a clip, watch it translated</h1>

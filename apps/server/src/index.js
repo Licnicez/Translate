@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { streamSSE } from 'hono/streaming';
+import { cors } from 'hono/cors';
+import { timingSafeEqual } from 'node:crypto';
 import { config } from './config.js';
 import { videoId } from './videoId.js';
 import { getJob, cached } from './jobs.js';
@@ -11,9 +13,22 @@ const app = new Hono();
 
 const lang = (v) => (String(v || 'en').replace(/[^\w-]/g, '').slice(0, 8) || 'en');
 
-app.get('/api/health', (c) => c.json({ ok: true, translator: translatorName }));
+// The site may live on another origin (Vercel) and reach this API through a tunnel.
+app.use('/api/*', cors({ origin: config.allowedOrigins.includes('*') ? '*' : config.allowedOrigins, allowHeaders: ['x-access-code', 'last-event-id'] }));
+
+/** With ACCESS_CODE set, every translate request must carry it (?key= for EventSource, or a header). */
+const codeOk = (c) => {
+  if (!config.accessCode) return true;
+  const given = Buffer.from(String(c.req.query('key') || c.req.header('x-access-code') || ''));
+  const want = Buffer.from(config.accessCode);
+  return given.length === want.length && timingSafeEqual(given, want);
+};
+const UNAUTHORIZED = { code: 'unauthorized', message: 'This server needs an access code. Enter it in server settings.', retryable: false };
+
+app.get('/api/health', (c) => c.json({ ok: true, translator: translatorName, needsCode: !!config.accessCode, codeOk: codeOk(c) }));
 
 app.get('/api/transcript', async (c) => {
+  if (!codeOk(c)) return c.json(UNAUTHORIZED, 401);
   const id = videoId(c.req.query('v'));
   if (!id) return c.json({ code: 'bad_url', message: 'That does not look like a YouTube link.' }, 400);
   const hit = await cached(id, lang(c.req.query('to')));
@@ -30,6 +45,8 @@ app.get('/api/stream', (c) => {
   return streamSSE(c, async (stream) => {
     const send = (event, data, id) => stream.writeSSE({ event, data: JSON.stringify(data), ...(id !== undefined && { id: String(id) }) });
 
+    // Sent as an SSE event, not a 401: EventSource cannot read an error response's body.
+    if (!codeOk(c)) { await send('error', UNAUTHORIZED); return; }
     if (!id) { await send('error', { code: 'bad_url', message: 'That does not look like a YouTube link.', retryable: false }); return; }
 
     const job = getJob(id, to);

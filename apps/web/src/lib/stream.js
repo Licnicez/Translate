@@ -1,3 +1,5 @@
+import { apiUrl } from './api.js';
+
 /**
  * Open the translation stream for (video, lang), resuming after `have` chunks.
  * Reconnects with backoff on a dropped connection, always asking only for the
@@ -8,8 +10,7 @@ export function openStream({ video, lang, have = 0, onMeta, onChunk, onDone, onE
 
   const connect = () => {
     if (closed) return;
-    const qs = new URLSearchParams({ v: video, to: lang, from: String(next) });
-    es = new EventSource('/api/stream?' + qs);
+    es = new EventSource(apiUrl('/api/stream', { v: video, to: lang, from: String(next) }));
 
     es.addEventListener('meta', (e) => { tries = 0; onStatus?.('live'); onMeta?.(JSON.parse(e.data)); });
     es.addEventListener('chunk', (e) => {

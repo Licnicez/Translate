@@ -32,3 +32,15 @@ For Gemini, copy `.env.example` to `.env` and set `GEMINI_API_KEY`. The free tie
 
 The key and model list are read from `.env` (optional). After changing code or
 `.env`, run `docker compose up --build -d` again.
+
+## Vercel (site) + your PC (API)
+
+The site deploys to Vercel from this repo (`vercel.json` builds `apps/web`; keep the
+project's root directory at the repo root). Vercel serves only the site: translation
+runs on the Docker server on your PC, reached through a tunnel (Tailscale Funnel,
+Cloudflare Tunnel or ngrok).
+
+1. Set `ACCESS_CODE` in `.env` and run the Docker server.
+2. Expose port 8787 through the tunnel.
+3. Open the Vercel site, choose "set up server", and enter the tunnel address and the code.
+   Each browser remembers them.
